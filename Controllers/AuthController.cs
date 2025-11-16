@@ -9,7 +9,13 @@ namespace TaskManager.Api.Controllers
     public class AuthController : ControllerBase
     {
         private readonly AuthService _auth;
-        public AuthController(AuthService auth) { _auth = auth; }
+        private readonly ILogger<AuthController> _logger;
+        
+        public AuthController(AuthService auth, ILogger<AuthController> logger) 
+        { 
+            _auth = auth;
+            _logger = logger;
+        }
 
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
@@ -17,19 +23,17 @@ namespace TaskManager.Api.Controllers
             try
             {
                 var result = await _auth.Register(dto);
-                return Ok(new {
-                    token = result.Token,
-                    user = new {
-                        id = result.UserId,
-                        email = result.Email,
-                        name = result.Name
-                    }
-                });
-
+                return Ok(result);
             }
-            catch(Exception ex){
-                Console.WriteLine($"REGISTER ERROR: {ex.GetType().Name} - {ex.Message}");
-                return StatusCode(500, new {message = "Internal server error"});
+            catch (ApplicationException ex)
+            {
+                _logger.LogWarning(ex, "Register validation error: {Message}", ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Register error: {Message}", ex.Message);
+                return StatusCode(500, new { message = "An error occurred during registration", error = ex.Message });
             }
         }
 
@@ -39,19 +43,17 @@ namespace TaskManager.Api.Controllers
             try
             {
                 var result = await _auth.Login(dto);
-                return Ok(new {
-                    token = result.Token,
-                    user = new {
-                        id = result.UserId,
-                        email = result.Email,
-                        name = result.Name
-                    }
-                });
-
+                return Ok(result);
             }
-            catch (ApplicationException)
+            catch (ApplicationException ex)
             {
-                return Unauthorized(new { message = "Invalid credentials" });
+                _logger.LogWarning(ex, "Login failed: {Message}", ex.Message);
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Login error: {Message}", ex.Message);
+                return StatusCode(500, new { message = "An error occurred during login" });
             }
         }
     }
