@@ -51,28 +51,65 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Database
-var connectionString = Environment.GetEnvironmentVariable("RAILWAY_DATABASE_URL") ?? builder.Configuration.GetConnectionString("DefaultConnection");
+// Database - Debugging
+Console.WriteLine("--- Database Configuration Debug ---");
+var envConnectionString = Environment.GetEnvironmentVariable("RAILWAY_DATABASE_URL");
+var configConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+Console.WriteLine($"DEBUG: RAILWAY_DATABASE_URL env var value: '{envConnectionString}'");
+Console.WriteLine($"DEBUG: DefaultConnection from config: '{configConnectionString}'");
+
+var connectionString = envConnectionString ?? configConnectionString;
+
+Console.WriteLine($"DEBUG: Final connection string before fix: '{connectionString}'");
+
 // Fix format if necessary
 if (!string.IsNullOrEmpty(connectionString) && connectionString.StartsWith("postgresql://"))
 {
     connectionString = connectionString.Replace("postgresql://", "postgres://");
+    Console.WriteLine("Fixed connection string format to postgres://");
 }
+else
+{
+    Console.WriteLine("Connection string format did not require fixing or was null/empty.");
+}
+
+// Validation
+if (string.IsNullOrEmpty(connectionString) || connectionString == "DefaultConnection")
+{
+    var errorMsg = $"CRITICAL ERROR: Connection string is invalid: '{connectionString}'. Ensure RAILWAY_DATABASE_URL environment variable is set correctly in Railway dashboard.";
+    Console.WriteLine(errorMsg);
+    throw new InvalidOperationException(errorMsg);
+}
+
+Console.WriteLine($"DEBUG: Final connection string after fix and validation: '{connectionString}'");
+Console.WriteLine("--- End Database Configuration Debug ---");
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+{
+    Console.WriteLine("DEBUG: AppDbContext is being registered with the connection string.");
+    options.UseNpgsql(connectionString);
+});
 
 
 // Dependency Injection
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 
-// JWT
+// JWT - Debugging
+Console.WriteLine("--- JWT Configuration Debug ---");
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET") ?? builder.Configuration["Jwt:Key"];
-Console.WriteLine($"JWT Key used: {jwtKey}");
-if (string.IsNullOrEmpty(jwtKey))
+Console.WriteLine($"DEBUG: JWT_SECRET env var or Jwt:Key config value length: {jwtKey?.Length ?? 0} characters");
+Console.WriteLine($"DEBUG: JWT Key starts with 'JWT_SECRET': {jwtKey?.StartsWith("JWT_SECRET") ?? false}"); // Check if placeholder from config
+
+if (string.IsNullOrEmpty(jwtKey) || jwtKey.StartsWith("JWT_SECRET")) // Assuming "JWT_SECRET" or similar placeholder
 {
-    throw new InvalidOperationException("JWT Key is not configured.");
+    var errorMsg = "CRITICAL ERROR: JWT Key is not configured correctly. Ensure JWT_SECRET environment variable is set with a strong key.";
+    Console.WriteLine(errorMsg);
+    throw new InvalidOperationException(errorMsg);
 }
+Console.WriteLine("--- End JWT Configuration Debug ---");
+
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -88,7 +125,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero
         };
     });
-
 
 // CORS
 builder.Services.AddCors(opt =>
@@ -123,22 +159,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // RAILWAY USE DEFAULT PORT
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-app.Urls.Add($"http://0.0.0.0:{port}");
-
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    try
-    {
-        await context.Database.MigrateAsync(); // Jalankan migrasi
-        Console.WriteLine("Database migrated successfully.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Database migration failed: {ex.Message}");
-        throw; // Re-throw agar aplikasi crash jika migration gagal
-    }
-}
+// var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+// app.Urls.Add($"http://0.0.0.0:{port}");
 
 app.Run();
