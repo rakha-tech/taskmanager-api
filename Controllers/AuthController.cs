@@ -23,17 +23,19 @@ namespace TaskManager.Api.Controllers
             try
             {
                 var result = await _auth.Register(dto);
-                return Ok(result);
+
+                return Ok(new {
+                    token = result.Token,
+                    user = new {
+                        id = result.UserId,
+                        email = result.Email,
+                        name = result.Name
+                    }
+                });
             }
             catch (ApplicationException ex)
             {
-                _logger.LogWarning(ex, "Register validation error: {Message}", ex.Message);
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Register error: {Message}", ex.Message);
-                return StatusCode(500, new { message = "An error occurred during registration", error = ex.Message });
+                return Conflict(new { message = ex.Message });
             }
         }
 
@@ -43,18 +45,21 @@ namespace TaskManager.Api.Controllers
             try
             {
                 var result = await _auth.Login(dto);
-                return Ok(result);
+
+                return Ok(new {
+                    token = result.Token,
+                    user = new {
+                        id = result.UserId,
+                        email = result.Email,
+                        name = result.Name
+                    }
+                });
             }
-            catch (ApplicationException ex)
+            catch (ApplicationException)
             {
-                _logger.LogWarning(ex, "Login failed: {Message}", ex.Message);
-                return Unauthorized(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Login error: {Message}", ex.Message);
-                return StatusCode(500, new { message = "An error occurred during login" });
+                return Unauthorized(new { message = "Invalid credentials" });
             }
         }
+
     }
 }
