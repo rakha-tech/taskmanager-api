@@ -68,6 +68,7 @@ builder.Services.AddScoped<AuthService>();
 
 // JWT
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET") ?? builder.Configuration["Jwt:Key"];
+Console.WriteLine($"JWT Key used: {jwtKey}");
 if (string.IsNullOrEmpty(jwtKey))
 {
     throw new InvalidOperationException("JWT Key is not configured.");
@@ -124,5 +125,20 @@ app.MapControllers();
 // RAILWAY USE DEFAULT PORT
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
+
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        await context.Database.MigrateAsync(); // Jalankan migrasi
+        Console.WriteLine("Database migrated successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Database migration failed: {ex.Message}");
+        throw; // Re-throw agar aplikasi crash jika migration gagal
+    }
+}
 
 app.Run();
