@@ -27,9 +27,9 @@ namespace TaskManager.Api.Controllers
                 });
 
             }
-            catch (ApplicationException ex)
-            {
-                return Conflict(new { message = ex.Message });
+            catch(Exception ex){
+                Console.WriteLine($"REGISTER ERROR: {ex.GetType().Name} - {ex.Message}");
+                return StatusCode(500, new {message = "Internal server error"});
             }
         }
 

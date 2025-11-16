@@ -15,7 +15,11 @@ namespace TaskManager.Api.Services
 
         public string CreateToken(User user)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+            // Ambil dari konfigurasi Jwt:Key, jika kosong fallback ke env var JWT_SECRET
+            var keyStr = _config["Jwt:Key"] ?? Environment.GetEnvironmentVariable("JWT_SECRET");
+            if (string.IsNullOrWhiteSpace(keyStr))
+                throw new InvalidOperationException("JWT key is not configured. Set Jwt:Key or JWT_SECRET.");
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyStr));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]
