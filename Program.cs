@@ -10,54 +10,61 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog simple setup
+// Serilog logs
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
-    .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
 builder.Host.UseSerilog();
 
-// Add services
+// Controllers + enum JSON string
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
+    .AddJsonOptions(opt =>
     {
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        opt.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Description = "JWT Authorization header using Bearer scheme",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey
     });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement {
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
         {
-            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
+            new OpenApiSecurityScheme 
+            { 
+                Reference = new OpenApiReference 
+                { 
+                    Type = ReferenceType.SecurityScheme, 
+                    Id = "Bearer" 
+                } 
+            },
             new string[] {}
         }
     });
 });
 
-// DB
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Database
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<AppDbContext>(opt =>
+    opt.UseNpgsql(connectionString));
 
-// JWT Auth
+// JWT
 var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!);
-builder.Services.AddAuthentication(options =>
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+.AddJwtBearer(opt =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-}).AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
+    opt.RequireHttpsMetadata = false;
+    opt.SaveToken = true;
+    opt.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
@@ -69,24 +76,28 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// DI
+// Dependency Injection
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 
-// CORS for Next.js dev & production (adjust domain later)
-builder.Services.AddCors(options =>
+// CORS
+builder.Services.AddCors(opt =>
 {
-    options.AddPolicy("AllowFrontend", policy =>
+    opt.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://taskmanager-rakha.vercel.app/dashboard")
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+        policy.WithOrigins(
+            "http://localhost:3000",
+            "https://taskmanager-rakha.vercel.app"
+        )
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials();
     });
 });
 
 var app = builder.Build();
 
+// Swagger for dev
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -96,10 +107,13 @@ if (app.Environment.IsDevelopment())
 app.UseSerilogRequestLogging();
 
 app.UseCors("AllowFrontend");
-
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// RAILWAY USE DEFAULT PORT
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+app.Urls.Add($"http://0.0.0.0:{port}");
 
 app.Run();
